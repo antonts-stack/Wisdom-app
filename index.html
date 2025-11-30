@@ -34,31 +34,41 @@
   </div>
 
   <script>
-    const DATA_URL = "https://docs.google.com/spreadsheets/d/1rpEUSGMShAkhFnYIGi_eUcYnWyef77bm2z8Xt33OPr0/export?format=tsv&gid=0";
+    // gviz JSON preserves in-cell newlines
+    const GVIZ_URL = "https://docs.google.com/spreadsheets/d/1rpEUSGMShAkhFnYIGi_eUcYnWyef77bm2z8Xt33OPr0/gviz/tq?tqx=out:json&gid=0";
 
-    let items = [], byCat = new Map();
+    let items = [];       // [{ text, category }]
+    let byCat = new Map();
 
-    function parseTSV(tsv) {
-      const lines = tsv.replace(/\r/g,"").split("\n").filter(l => l.trim().length>0);
-      if (!lines.length) return [];
-      const headers = lines[0].split("\t").map(h => h.trim().toLowerCase());
-      const textIdx = headers.indexOf("text");
-      const catIdx  = headers.indexOf("category");
-      if (textIdx === -1) return [];
-      const rows = [];
-      for (let i=1;i<lines.length;i++){
-        const cols = lines[i].split("\t");
-        const text = (cols[textIdx]||"").trim();
-        const category = ((catIdx!==-1?cols[catIdx]:"")||"general").trim()||"general";
-        if (text) rows.push({text, category});
+    // Parse the gviz response (wrapped JSON)
+    function parseGviz(raw){
+      const json = raw.replace(/^[^{]+/, "").replace(/;?$/,""); // strip "google.visualization.Query.setResponse("
+      const data = JSON.parse(json);
+      const cols = data.table.cols.map(c => (c.label || "").toLowerCase().trim());
+      // Try to map by labels; fallback to first/second column
+      let tIdx = cols.indexOf("text");
+      let cIdx = cols.indexOf("category");
+      if (tIdx < 0) tIdx = 0;
+      if (cIdx < 0) cIdx = 1;
+
+      const out = [];
+      for (const r of data.table.rows) {
+        const cells = r.c || [];
+        const t = (cells[tIdx] && (cells[tIdx].v ?? cells[tIdx].f)) ?? "";
+        if (!String(t).trim()) continue;
+        let cat = (cells[cIdx] && (cells[cIdx].v ?? cells[cIdx].f)) ?? "general";
+        cat = String(cat || "general").trim() || "general";
+        // Normalize newlines
+        const text = String(t).replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+        out.push({ text, category: cat });
       }
-      return rows;
+      return out;
     }
 
-    function buildCategories() {
+    function buildCategories(){
       const sel = document.getElementById("category");
       const cats = [...new Set(items.map(x => x.category || "general"))].sort();
-      sel.innerHTML = '<option value="all">All</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join("");
+      sel.innerHTML = '<option value="all">All</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join("");
       byCat = new Map();
       for (const it of items){
         const c = it.category || "general";
@@ -69,32 +79,32 @@
 
     function pool(){
       const v = document.getElementById("category").value;
-      return v==="all" ? items : (byCat.get(v)||[]);
+      return v === "all" ? items : (byCat.get(v) || []);
     }
 
     function next(){
       const p = pool();
       const card = document.getElementById("card");
       if (!p.length){ card.textContent = "No entries."; return; }
-      const i = Math.floor(Math.random()*p.length);
+      const i = Math.floor(Math.random() * p.length);
       card.scrollTop = 0;
-      card.textContent = p[i].text;
+      card.textContent = p[i].text;   // preserves \n due to white-space: pre-wrap
     }
 
     async function loadData(){
       try{
-        const r = await fetch(DATA_URL, { cache: "no-store" });
-        if(!r.ok) throw new Error("HTTP "+r.status);
-        const tsv = await r.text();
-        items = parseTSV(tsv);
-        if(!items.length) throw new Error("Parsed 0 rows");
+        const r = await fetch(GVIZ_URL + "&t=" + Date.now(), { cache: "no-store" });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const raw = await r.text();
+        items = parseGviz(raw);
+        if (!items.length) throw new Error("No rows");
         localStorage.setItem("wisdom_cache", JSON.stringify(items));
       }catch(e){
         const cached = localStorage.getItem("wisdom_cache");
         if (cached) items = JSON.parse(cached);
       }
       const card = document.getElementById("card");
-      if(!items.length){ card.textContent = "Couldn't load data."; return; }
+      if (!items.length){ card.textContent = "Couldn't load data."; return; }
       buildCategories();
       next();
     }
