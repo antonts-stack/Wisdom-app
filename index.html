@@ -1,0 +1,125 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2575.7">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+  </style>
+</head>
+<body>
+<p class="p1">&lt;!DOCTYPE html&gt;</p>
+<p class="p1">&lt;html lang="en"&gt;</p>
+<p class="p1">&lt;head&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta charset="UTF-8" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;title&gt;Wisdom&lt;/title&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;style&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>:root{--bg:#000;--fg:#fff;--muted:#2a2a2a;--accent:#6ee7ff}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>html,body{height:100%}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>body{margin:0;background:var(--bg);color:var(--fg);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>display:flex;align-items:center;justify-content:center;padding:16px}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.wrap{width:100%;max-width:760px;display:flex;flex-direction:column;gap:14px}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#card{border:1px solid var(--muted);border-radius:16px;padding:20px 18px;line-height:1.6;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-size:clamp(17px,2.2vh + .6vw,21px);white-space:pre-wrap;user-select:none;max-height:70vh;overflow:auto;-webkit-overflow-scrolling:touch}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.row{display:flex;gap:10px;align-items:center;justify-content:center}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>select{appearance:none;background:#111;color:var(--fg);border:1px solid var(--muted);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>border-radius:999px;padding:10px 12px;font-size:14px}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>button{border:1px solid var(--muted);background:#111;color:var(--fg);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding:12px 18px;font-size:16px;border-radius:999px;cursor:pointer}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>button:active{transform:scale(.98)}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.hint{font-size:13px;opacity:.6;text-align:center}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/style&gt;</p>
+<p class="p1">&lt;/head&gt;</p>
+<p class="p1">&lt;body&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div class="wrap"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div id="card" aria-live="polite"&gt;Loading…&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="row"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;select id="category"&gt;&lt;option value="all"&gt;All&lt;/option&gt;&lt;/select&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;button id="nextBtn"&gt;Next&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="hint"&gt;Tap the text or press Next&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;script&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const DATA_URL = "https://docs.google.com/spreadsheets/d/1rpEUSGMShAkhFnYIGi_eUcYnWyef77bm2z8Xt33OPr0/export?format=tsv&amp;gid=0";</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>let items = [], byCat = new Map();</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>function parseTSV(tsv) {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const lines = tsv.replace(/\r/g,"").split("\n").filter(l =&gt; l.trim().length&gt;0);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>if (!lines.length) return [];</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const headers = lines[0].split("\t").map(h =&gt; h.trim().toLowerCase());</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const textIdx = headers.indexOf("text");</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const catIdx<span class="Apple-converted-space">  </span>= headers.indexOf("category");</p>
+<p class="p1"><span class="Apple-converted-space">      </span>if (textIdx === -1) return [];</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const rows = [];</p>
+<p class="p1"><span class="Apple-converted-space">      </span>for (let i=1;i&lt;lines.length;i++){</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const cols = lines[i].split("\t");</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const text = (cols[textIdx]||"").trim();</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const category = ((catIdx!==-1?cols[catIdx]:"")||"general").trim()||"general";</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (text) rows.push({text, category});</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}</p>
+<p class="p1"><span class="Apple-converted-space">      </span>return rows;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>function buildCategories() {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const sel = document.getElementById("category");</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const cats = [...new Set(items.map(x =&gt; x.category || "general"))].sort();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>sel.innerHTML = '&lt;option value="all"&gt;All&lt;/option&gt;' + cats.map(c =&gt; `&lt;option value="${c}"&gt;${c}&lt;/option&gt;`).join("");</p>
+<p class="p1"><span class="Apple-converted-space">      </span>byCat = new Map();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>for (const it of items){</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const c = it.category || "general";</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (!byCat.has(c)) byCat.set(c, []);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>byCat.get(c).push(it);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>function pool(){</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const v = document.getElementById("category").value;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>return v==="all" ? items : (byCat.get(v)||[]);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>function next(){</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const p = pool();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const card = document.getElementById("card");</p>
+<p class="p1"><span class="Apple-converted-space">      </span>if (!p.length){ card.textContent = "No entries."; return; }</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const i = Math.floor(Math.random()*p.length);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>card.scrollTop = 0;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>card.textContent = p[i].text;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>async function loadData(){</p>
+<p class="p1"><span class="Apple-converted-space">      </span>try{</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const r = await fetch(DATA_URL, { cache: "no-store" });</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if(!r.ok) throw new Error("HTTP "+r.status);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const tsv = await r.text();</p>
+<p class="p1"><span class="Apple-converted-space">        </span>items = parseTSV(tsv);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if(!items.length) throw new Error("Parsed 0 rows");</p>
+<p class="p1"><span class="Apple-converted-space">        </span>localStorage.setItem("wisdom_cache", JSON.stringify(items));</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}catch(e){</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const cached = localStorage.getItem("wisdom_cache");</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (cached) items = JSON.parse(cached);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const card = document.getElementById("card");</p>
+<p class="p1"><span class="Apple-converted-space">      </span>if(!items.length){ card.textContent = "Couldn't load data."; return; }</p>
+<p class="p1"><span class="Apple-converted-space">      </span>buildCategories();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>next();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById("nextBtn").addEventListener("click", next);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById("card").addEventListener("click", next);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById("category").addEventListener("change", next);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>loadData();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/script&gt;</p>
+<p class="p1">&lt;/body&gt;</p>
+<p class="p1">&lt;/html&gt;</p>
+</body>
+</html>
