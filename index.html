@@ -39,27 +39,35 @@
     <div class="row">
       <select id="category"><option value="all">All</option></select>
       <button id="nextBtn">Next</button>
-      <button id="refreshBtn" title="Force sync">Refresh</button>
-      <button id="resetBtn" title="Clear cache + reload">Reset</button>
     </div>
-    <div class="hint">Tap the text or press Next • Refresh pulls latest from Google Sheets</div>
+    <div class="hint">Tap the text or press Next</div>
   </div>
 
   <script>
-    // Google Sheets (gviz JSON) — preserves in-cell newlines (Alt/Option+Enter)
-    const GVIZ_URL =
-      "https://docs.google.com/spreadsheets/d/1rpEUSGMShAkhFnYIGi_eUcYnWyef77bm2z8Xt33OPr0/gviz/tq?tqx=out:json&gid=0";
+    // Sheet config
+    const SHEET_ID = "1rpEUSGMShAkhFnYIGi_eUcYnWyef77bm2z8Xt33OPr0";
+    const GID = "0";
+
+    // Primary (preserves in-cell newlines), plus CSV fallback
+    const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${GID}`;
+    const CSV_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
 
     let items = [];
     let byCat = new Map();
 
     function show(msg){ document.getElementById("card").textContent = msg; }
 
-    function parseGviz(raw){
-      // Strip wrapper: google.visualization.Query.setResponse(...)
-      const json = raw.replace(/^[^{]+/, "").replace(/;?$/,"");
-      const data = JSON.parse(json);
+    // --- GVIZ robust extractor ---
+    function extractGvizJSON(raw){
+      const m = raw.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\)\s*;?\s*$/);
+      if (m && m[1]) return JSON.parse(m[1]);
+      const start = raw.indexOf("{"), end = raw.lastIndexOf("}");
+      if (start === -1 || end === -1 || end <= start) throw new Error("Unexpected GVIZ response");
+      return JSON.parse(raw.slice(start, end + 1));
+    }
 
+    function parseGviz(raw){
+      const data = extractGvizJSON(raw);
       const cols = data.table.cols.map(c => (c.label || "").toLowerCase().trim());
       let tIdx = cols.indexOf("text"); if (tIdx < 0) tIdx = 0;
       let cIdx = cols.indexOf("category"); if (cIdx < 0) cIdx = 1;
@@ -76,37 +84,73 @@
       return out;
     }
 
-    function buildCategories(){
-      const sel = document.getElementById("category");
-      const cats = [...new Set(items.map(x => x.category || "general"))].sort();
-      sel.innerHTML = '<option value="all">All</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join("");
-      byCat = new Map();
-      for (const it of items){
-        const k = it.category || "general";
-        if (!byCat.has(k)) byCat.set(k, []);
-        byCat.get(k).push(it);
+    // --- CSV parser (handles quotes + newlines) ---
+    function parseCSV(text){
+      const rows = []; let row=[], field="", i=0, q=false;
+      while (i<text.length){
+        const ch=text[i];
+        if (q){
+          if (ch === '"'){ if (text[i+1] === '"'){ field+='"'; i+=2; continue; } q=false; i++; continue; }
+          field+=ch; i++; continue;
+        } else {
+          if (ch === '"'){ q=true; i++; continue; }
+          if (ch === ","){ row.push(field); field=""; i++; continue; }
+          if (ch === "\r"){ i++; continue; }
+          if (ch === "\n"){ row.push(field); rows.push(row); row=[]; field=""; i++; continue; }
+          field+=ch; i++;
+        }
       }
+      row.push(field); rows.push(row);
+      if (!rows.length) return [];
+      const headers = rows[0].map(h => (h||"").trim().toLowerCase());
+      const tIdx = headers.indexOf("text");
+      const cIdx = headers.indexOf("category");
+      const out = [];
+      for (let r=1;r<rows.length;r++){
+        const cols=rows[r];
+        const t=(cols[tIdx]||"").trim(); if (!t) continue;
+        let cat=((cIdx!==-1?cols[cIdx]:"")||"general").trim()||"general";
+        out.push({ text: t.replace(/\r\n/g,"\n").replace(/\r/g,"\n"), category: cat });
+      }
+      return out;
     }
 
-    function pool(){ const v = document.getElementById("category").value; return v === "all" ? items : (byCat.get(v)||[]); }
+    function buildCategories(){
+      const sel=document.getElementById("category");
+      const cats=[...new Set(items.map(x=>x.category||"general"))].sort();
+      sel.innerHTML='<option value="all">All</option>'+cats.map(c=>`<option value="${c}">${c}</option>`).join("");
+      byCat=new Map();
+      for (const it of items){ const k=it.category||"general"; (byCat.get(k)||byCat.set(k,[]).get(k)).push(it); }
+    }
+
+    function pool(){ const v=document.getElementById("category").value; return v==="all"?items:(byCat.get(v)||[]); }
 
     function next(){
-      const p = pool(); const card = document.getElementById("card");
-      if (!p.length){ show("No entries."); return; }
-      const i = Math.floor(Math.random() * p.length);
-      card.scrollTop = 0;
-      card.textContent = p[i].text; // newlines preserved by CSS white-space: pre-wrap
+      const p=pool(), card=document.getElementById("card");
+      if(!p.length){ show("No entries."); return; }
+      const i=Math.floor(Math.random()*p.length);
+      card.scrollTop=0;
+      card.textContent=p[i].text;
+    }
+
+    async function fetchText(url){
+      const r=await fetch(url + "&t=" + Date.now(), {cache:"no-store"});
+      if(!r.ok) throw new Error("HTTP " + r.status);
+      return r.text();
     }
 
     async function fetchLive(){
-      // Cache-bust so new edits show as soon as Google propagates them
-      const url = GVIZ_URL + "&t=" + Date.now();
-      const r = await fetch(url, { cache: "no-store" });
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const raw = await r.text();
-      const data = parseGviz(raw);
-      if (!data.length) throw new Error("0 rows (check headers `text` / `category`, and gid)");
-      return data;
+      try{
+        const raw=await fetchText(GVIZ_URL);
+        const data=parseGviz(raw);
+        if(!data.length) throw new Error("0 rows");
+        return data;
+      }catch(e){
+        const raw=await fetchText(CSV_URL);
+        const data=parseCSV(raw);
+        if(!data.length) throw new Error("CSV fallback empty (check headers/gid)");
+        return data;
+      }
     }
 
     async function loadData({forceNetwork=false} = {}){
@@ -116,12 +160,8 @@
         localStorage.setItem("wisdom_cache", JSON.stringify(items));
       }catch(e){
         const cached = localStorage.getItem("wisdom_cache");
-        if (cached) {
-          items = JSON.parse(cached);
-        } else {
-          show("Couldn't load data: " + e.message);
-          return;
-        }
+        if (cached) { items = JSON.parse(cached); }
+        else { show("Couldn't load data: " + e.message); return; }
       }
       buildCategories(); next();
     }
@@ -130,13 +170,11 @@
     document.getElementById("nextBtn").addEventListener("click", next);
     document.getElementById("card").addEventListener("click", next);
     document.getElementById("category").addEventListener("change", next);
-    document.getElementById("refreshBtn").addEventListener("click", () => loadData({forceNetwork:true}));
-    document.getElementById("resetBtn").addEventListener("click", () => { localStorage.clear(); location.reload(); });
 
-    // Auto-refresh on app foreground
+    // Auto-refresh when returning to the app
     document.addEventListener("visibilitychange", () => { if (!document.hidden) loadData({forceNetwork:true}); });
 
-    // Initial load
+    // Initial load (network-first)
     loadData({forceNetwork:true});
   </script>
 </body>
