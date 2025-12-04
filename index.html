@@ -44,11 +44,22 @@
   </div>
 
   <script>
+    /* ---------- Auto cache-bust the shell ---------- */
+    const APP_VERSION = "v3"; // bump this when you deploy new code
+    (function ensureFresh(){
+      const u = new URL(location.href);
+      if (u.searchParams.get("v") !== APP_VERSION){
+        u.searchParams.set("v", APP_VERSION);
+        location.replace(u.toString()); // reload once with ?v=<APP_VERSION>
+      }
+    })();
+    /* ---------------------------------------------- */
+
     // Sheet config
     const SHEET_ID = "1rpEUSGMShAkhFnYIGi_eUcYnWyef77bm2z8Xt33OPr0";
     const GID = "0";
 
-    // Primary (preserves in-cell newlines), plus CSV fallback
+    // Primary (GVIZ JSON preserves in-cell newlines); CSV fallback
     const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${GID}`;
     const CSV_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
 
@@ -84,7 +95,7 @@
       return out;
     }
 
-    // --- CSV parser (handles quotes + newlines) ---
+    // --- CSV parser (handles quotes + embedded newlines) ---
     function parseCSV(text){
       const rows = []; let row=[], field="", i=0, q=false;
       while (i<text.length){
