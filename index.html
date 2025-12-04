@@ -40,19 +40,23 @@
       <select id="category"><option value="all">All</option></select>
       <button id="nextBtn">Next</button>
       <button id="refreshBtn" title="Force sync">Refresh</button>
+      <button id="resetBtn" title="Clear cache + reload">Reset</button>
     </div>
     <div class="hint">Tap the text or press Next • Refresh pulls latest from Google Sheets</div>
   </div>
 
   <script>
     // Google Sheets (gviz JSON) — preserves in-cell newlines (Alt/Option+Enter)
-    const GVIZ_URL = "https://docs.google.com/spreadsheets/d/1rpEUSGMShAkhFnYIGi_eUcYnWyef77bm2z8Xt33OPr0/gviz/tq?tqx=out:json&gid=0";
+    const GVIZ_URL =
+      "https://docs.google.com/spreadsheets/d/1rpEUSGMShAkhFnYIGi_eUcYnWyef77bm2z8Xt33OPr0/gviz/tq?tqx=out:json&gid=0";
 
-    let items = [];       // [{ text, category }]
+    let items = [];
     let byCat = new Map();
 
+    function show(msg){ document.getElementById("card").textContent = msg; }
+
     function parseGviz(raw){
-      // strip wrapper: google.visualization.Query.setResponse(...)
+      // Strip wrapper: google.visualization.Query.setResponse(...)
       const json = raw.replace(/^[^{]+/, "").replace(/;?$/,"");
       const data = JSON.parse(json);
 
@@ -75,7 +79,7 @@
     function buildCategories(){
       const sel = document.getElementById("category");
       const cats = [...new Set(items.map(x => x.category || "general"))].sort();
-      sel.innerHTML = '<option value="all">All</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join("");
+      sel.innerHTML = '<option value="all">All</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join("");
       byCat = new Map();
       for (const it of items){
         const k = it.category || "general";
@@ -84,40 +88,42 @@
       }
     }
 
-    function pool(){
-      const v = document.getElementById("category").value;
-      return v === "all" ? items : (byCat.get(v) || []);
-    }
+    function pool(){ const v = document.getElementById("category").value; return v === "all" ? items : (byCat.get(v)||[]); }
 
     function next(){
-      const p = pool();
-      const card = document.getElementById("card");
-      if (!p.length){ card.textContent = "No entries."; return; }
+      const p = pool(); const card = document.getElementById("card");
+      if (!p.length){ show("No entries."); return; }
       const i = Math.floor(Math.random() * p.length);
       card.scrollTop = 0;
       card.textContent = p[i].text; // newlines preserved by CSS white-space: pre-wrap
     }
 
     async function fetchLive(){
-      // cache-bust so new edits show as soon as Google propagates them
-      const r = await fetch(GVIZ_URL + "&t=" + Date.now(), { cache: "no-store" });
+      // Cache-bust so new edits show as soon as Google propagates them
+      const url = GVIZ_URL + "&t=" + Date.now();
+      const r = await fetch(url, { cache: "no-store" });
       if (!r.ok) throw new Error("HTTP " + r.status);
-      return parseGviz(await r.text());
+      const raw = await r.text();
+      const data = parseGviz(raw);
+      if (!data.length) throw new Error("0 rows (check headers `text` / `category`, and gid)");
+      return data;
     }
 
     async function loadData({forceNetwork=false} = {}){
-      const card = document.getElementById("card");
       try{
         if (forceNetwork) localStorage.removeItem("wisdom_cache");
         items = await fetchLive();
         localStorage.setItem("wisdom_cache", JSON.stringify(items));
       }catch(e){
         const cached = localStorage.getItem("wisdom_cache");
-        items = cached ? JSON.parse(cached) : [];
+        if (cached) {
+          items = JSON.parse(cached);
+        } else {
+          show("Couldn't load data: " + e.message);
+          return;
+        }
       }
-      if (!items.length){ card.textContent = "Couldn't load data."; return; }
-      buildCategories();
-      next();
+      buildCategories(); next();
     }
 
     // UI
@@ -125,11 +131,10 @@
     document.getElementById("card").addEventListener("click", next);
     document.getElementById("category").addEventListener("change", next);
     document.getElementById("refreshBtn").addEventListener("click", () => loadData({forceNetwork:true}));
+    document.getElementById("resetBtn").addEventListener("click", () => { localStorage.clear(); location.reload(); });
 
-    // Auto-refresh when returning to the app
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) loadData({forceNetwork:true});
-    });
+    // Auto-refresh on app foreground
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) loadData({forceNetwork:true}); });
 
     // Initial load
     loadData({forceNetwork:true});
