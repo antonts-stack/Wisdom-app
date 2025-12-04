@@ -44,8 +44,8 @@
   </div>
 
   <script>
-    /* ---------- Auto cache-bust the shell ---------- */
-    const APP_VERSION = "v3"; // bump this when you deploy new code
+    /* ---------- Auto cache-bust the shell (only for code changes) ---------- */
+    const APP_VERSION = "v4"; // bump ONLY when you change this file
     (function ensureFresh(){
       const u = new URL(location.href);
       if (u.searchParams.get("v") !== APP_VERSION){
@@ -53,7 +53,7 @@
         location.replace(u.toString()); // reload once with ?v=<APP_VERSION>
       }
     })();
-    /* ---------------------------------------------- */
+    /* ---------------------------------------------------------------------- */
 
     // Sheet config
     const SHEET_ID = "1rpEUSGMShAkhFnYIGi_eUcYnWyef77bm2z8Xt33OPr0";
@@ -65,6 +65,7 @@
 
     let items = [];
     let byCat = new Map();
+    let lastLoad = 0;
 
     function show(msg){ document.getElementById("card").textContent = msg; }
 
@@ -169,6 +170,7 @@
         if (forceNetwork) localStorage.removeItem("wisdom_cache");
         items = await fetchLive();
         localStorage.setItem("wisdom_cache", JSON.stringify(items));
+        lastLoad = Date.now();
       }catch(e){
         const cached = localStorage.getItem("wisdom_cache");
         if (cached) { items = JSON.parse(cached); }
@@ -177,16 +179,22 @@
       buildCategories(); next();
     }
 
+    // --- Auto-update rules ---
+    // 1) On launch (network-first)
+    loadData({forceNetwork:true});
+    // 2) Whenever app returns to foreground
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) loadData({forceNetwork:true});
+    });
+    // 3) When network comes back
+    window.addEventListener("online", () => loadData({forceNetwork:true}));
+    // 4) Every 60s while open (tune interval if you prefer)
+    setInterval(() => loadData({forceNetwork:true}), 60000);
+
     // UI
     document.getElementById("nextBtn").addEventListener("click", next);
     document.getElementById("card").addEventListener("click", next);
     document.getElementById("category").addEventListener("change", next);
-
-    // Auto-refresh when returning to the app
-    document.addEventListener("visibilitychange", () => { if (!document.hidden) loadData({forceNetwork:true}); });
-
-    // Initial load (network-first)
-    loadData({forceNetwork:true});
   </script>
 </body>
 </html>
