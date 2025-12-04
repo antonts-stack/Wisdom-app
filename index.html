@@ -8,17 +8,27 @@
     :root{--bg:#000;--fg:#fff;--muted:#2a2a2a;--accent:#6ee7ff}
     *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
     html,body{height:100%}
-    body{margin:0;background:var(--bg);color:var(--fg);
+    body{
+      margin:0;background:var(--bg);color:var(--fg);
       font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;
-      display:flex;align-items:center;justify-content:center;padding:16px}
+      display:flex;align-items:center;justify-content:center;padding:16px;
+    }
     .wrap{width:100%;max-width:760px;display:flex;flex-direction:column;gap:14px}
-    #card{border:1px solid var(--muted);border-radius:16px;padding:20px 18px;line-height:1.6;
-      font-size:clamp(17px,2.2vh + .6vw,21px);white-space:pre-wrap;user-select:none;max-height:70vh;overflow:auto;-webkit-overflow-scrolling:touch}
-    .row{display:flex;gap:10px;align-items:center;justify-content:center}
-    select{appearance:none;background:#111;color:var(--fg);border:1px solid var(--muted);
-      border-radius:999px;padding:10px 12px;font-size:14px}
-    button{border:1px solid var(--muted);background:#111;color:var(--fg);
-      padding:12px 18px;font-size:16px;border-radius:999px;cursor:pointer}
+    #card{
+      border:1px solid var(--muted);border-radius:16px;padding:20px 18px;
+      line-height:1.6;font-size:clamp(17px,2.2vh + .6vw,21px);
+      white-space:pre-wrap;user-select:none;max-height:70vh;overflow:auto;
+      -webkit-overflow-scrolling:touch;
+    }
+    .row{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}
+    select{
+      appearance:none;background:#111;color:var(--fg);border:1px solid var(--muted);
+      border-radius:999px;padding:10px 12px;font-size:14px
+    }
+    button{
+      border:1px solid var(--muted);background:#111;color:var(--fg);
+      padding:12px 18px;font-size:16px;border-radius:999px;cursor:pointer
+    }
     button:active{transform:scale(.98)}
     .hint{font-size:13px;opacity:.6;text-align:center}
   </style>
@@ -29,38 +39,35 @@
     <div class="row">
       <select id="category"><option value="all">All</option></select>
       <button id="nextBtn">Next</button>
+      <button id="refreshBtn" title="Force sync">Refresh</button>
     </div>
-    <div class="hint">Tap the text or press Next</div>
+    <div class="hint">Tap the text or press Next • Refresh pulls latest from Google Sheets</div>
   </div>
 
   <script>
-    // gviz JSON preserves in-cell newlines
+    // Google Sheets (gviz JSON) — preserves in-cell newlines (Alt/Option+Enter)
     const GVIZ_URL = "https://docs.google.com/spreadsheets/d/1rpEUSGMShAkhFnYIGi_eUcYnWyef77bm2z8Xt33OPr0/gviz/tq?tqx=out:json&gid=0";
 
     let items = [];       // [{ text, category }]
     let byCat = new Map();
 
-    // Parse the gviz response (wrapped JSON)
     function parseGviz(raw){
-      const json = raw.replace(/^[^{]+/, "").replace(/;?$/,""); // strip "google.visualization.Query.setResponse("
+      // strip wrapper: google.visualization.Query.setResponse(...)
+      const json = raw.replace(/^[^{]+/, "").replace(/;?$/,"");
       const data = JSON.parse(json);
+
       const cols = data.table.cols.map(c => (c.label || "").toLowerCase().trim());
-      // Try to map by labels; fallback to first/second column
-      let tIdx = cols.indexOf("text");
-      let cIdx = cols.indexOf("category");
-      if (tIdx < 0) tIdx = 0;
-      if (cIdx < 0) cIdx = 1;
+      let tIdx = cols.indexOf("text"); if (tIdx < 0) tIdx = 0;
+      let cIdx = cols.indexOf("category"); if (cIdx < 0) cIdx = 1;
 
       const out = [];
       for (const r of data.table.rows) {
-        const cells = r.c || [];
-        const t = (cells[tIdx] && (cells[tIdx].v ?? cells[tIdx].f)) ?? "";
+        const c = r.c || [];
+        const t = (c[tIdx] && (c[tIdx].v ?? c[tIdx].f)) ?? "";
         if (!String(t).trim()) continue;
-        let cat = (cells[cIdx] && (cells[cIdx].v ?? cells[cIdx].f)) ?? "general";
+        let cat = (c[cIdx] && (c[cIdx].v ?? c[cIdx].f)) ?? "general";
         cat = String(cat || "general").trim() || "general";
-        // Normalize newlines
-        const text = String(t).replace(/\r\n/g,"\n").replace(/\r/g,"\n");
-        out.push({ text, category: cat });
+        out.push({ text: String(t).replace(/\r\n/g,"\n").replace(/\r/g,"\n"), category: cat });
       }
       return out;
     }
@@ -71,9 +78,9 @@
       sel.innerHTML = '<option value="all">All</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join("");
       byCat = new Map();
       for (const it of items){
-        const c = it.category || "general";
-        if (!byCat.has(c)) byCat.set(c, []);
-        byCat.get(c).push(it);
+        const k = it.category || "general";
+        if (!byCat.has(k)) byCat.set(k, []);
+        byCat.get(k).push(it);
       }
     }
 
@@ -88,32 +95,44 @@
       if (!p.length){ card.textContent = "No entries."; return; }
       const i = Math.floor(Math.random() * p.length);
       card.scrollTop = 0;
-      card.textContent = p[i].text;   // preserves \n due to white-space: pre-wrap
+      card.textContent = p[i].text; // newlines preserved by CSS white-space: pre-wrap
     }
 
-    async function loadData(){
+    async function fetchLive(){
+      // cache-bust so new edits show as soon as Google propagates them
+      const r = await fetch(GVIZ_URL + "&t=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return parseGviz(await r.text());
+    }
+
+    async function loadData({forceNetwork=false} = {}){
+      const card = document.getElementById("card");
       try{
-        const r = await fetch(GVIZ_URL + "&t=" + Date.now(), { cache: "no-store" });
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        const raw = await r.text();
-        items = parseGviz(raw);
-        if (!items.length) throw new Error("No rows");
+        if (forceNetwork) localStorage.removeItem("wisdom_cache");
+        items = await fetchLive();
         localStorage.setItem("wisdom_cache", JSON.stringify(items));
       }catch(e){
         const cached = localStorage.getItem("wisdom_cache");
-        if (cached) items = JSON.parse(cached);
+        items = cached ? JSON.parse(cached) : [];
       }
-      const card = document.getElementById("card");
       if (!items.length){ card.textContent = "Couldn't load data."; return; }
       buildCategories();
       next();
     }
 
+    // UI
     document.getElementById("nextBtn").addEventListener("click", next);
     document.getElementById("card").addEventListener("click", next);
     document.getElementById("category").addEventListener("change", next);
+    document.getElementById("refreshBtn").addEventListener("click", () => loadData({forceNetwork:true}));
 
-    loadData();
+    // Auto-refresh when returning to the app
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) loadData({forceNetwork:true});
+    });
+
+    // Initial load
+    loadData({forceNetwork:true});
   </script>
 </body>
 </html>
